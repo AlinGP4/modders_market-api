@@ -1,10 +1,13 @@
 // src/users/users.service.ts
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import sharp from 'sharp';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateUserProfileDto } from './dto/create-user-profile.dto';
 import { CloudflareR2Service } from '../storage/cloudflare-r2.service';
 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
+const SUPPORTED_AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+const AVATAR_SIZE_PX = 512;
 
 @Injectable()
 export class UsersService {
@@ -91,8 +94,10 @@ export class UsersService {
       throw new BadRequestException('No se recibio archivo. Usa el campo multipart "file".');
     }
 
-    if (!file.mimetype?.startsWith('image/')) {
-      throw new BadRequestException('El avatar debe ser una imagen.');
+    if (!SUPPORTED_AVATAR_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Formato de avatar no soportado. Usa JPG, PNG, WEBP o AVIF.',
+      );
     }
 
     if (file.size > MAX_AVATAR_SIZE_BYTES) {
@@ -117,11 +122,15 @@ export class UsersService {
       );
     }
 
+    const optimizedAvatarBuffer = await this.optimizeAvatar(file.buffer);
+    const originalBaseName = (file.originalname || 'avatar').replace(/\.[^/.]+$/, '') || 'avatar';
+    const optimizedOriginalName = `${originalBaseName}.webp`;
+
     const avatarUrl = await this.cloudflareR2.uploadAvatar({
       supabaseUserId,
-      originalName: file.originalname || 'avatar',
-      mimeType: file.mimetype,
-      fileBuffer: file.buffer,
+      originalName: optimizedOriginalName,
+      mimeType: 'image/webp',
+      fileBuffer: optimizedAvatarBuffer,
     });
 
     const { data, error } = await this.supabase.client
@@ -139,5 +148,23 @@ export class UsersService {
     }
 
     return data;
+  }
+
+  private async optimizeAvatar(fileBuffer: Buffer): Promise<Buffer> {
+    try {
+      return await sharp(fileBuffer, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize(AVATAR_SIZE_PX, AVATAR_SIZE_PX, {
+          fit: 'cover',
+          position: 'centre',
+        })
+        .webp({
+          quality: 82,
+          effort: 5,
+        })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException('No se pudo procesar la imagen del avatar.');
+    }
   }
 }
