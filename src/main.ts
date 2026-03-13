@@ -30,7 +30,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(configService.get('PORT') || 3000);
-  console.log(`🚀 API running on http://localhost:${configService.get('PORT') || 3000}/api`);
+  const port = Number(configService.get<string>('PORT') ?? 3006);
+  await app.listen(port);
+  const publicApiUrl = (configService.get<string>('API_PUBLIC_URL') ?? `http://localhost:${port}`).replace(
+    /\/+$/,
+    '',
+  );
+  console.log(`🚀 API running on ${publicApiUrl}/api`);
 }
 bootstrap();
