@@ -30,4 +30,12 @@ export class CreateUserProfileDto {
   @ApiProperty({ example: { tebex: 'tebex.io/joker' }, required: false })
   @IsOptional()
   portfolio_links?: Record<string, string>;
+
+  @ApiProperty({
+    example: 'https://cdn.modders-market.com/avatars/user123/avatar.png',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  avatar_url?: string;
 }
