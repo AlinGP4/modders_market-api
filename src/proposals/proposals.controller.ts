@@ -19,9 +19,11 @@ export class ProposalsController {
   }
 
   @Get('job/:jobId')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Propuestas de un job + chat' })
-  async findByJob(@Param('jobId') jobId: string) {
-    return this.proposalsService.findByJob(jobId);
+  async findByJob(@Param('jobId') jobId: string, @Request() req: any) {
+    return this.proposalsService.findByJob(jobId, req.user.id);
   }
 
   @Patch(':proposalId/accept')

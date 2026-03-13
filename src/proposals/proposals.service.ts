@@ -55,7 +55,32 @@ export class ProposalsService {
         return data;
     }
 
-    async findByJob(jobId: string) {
+    async findByJob(jobId: string, viewerSupabaseId: string) {
+        const { data: viewer, error: viewerError } = await this.supabase.client
+            .from('users')
+            .select('id, role')
+            .eq('supabase_user_id', viewerSupabaseId)
+            .maybeSingle();
+
+        if (viewerError) throw viewerError;
+        if (!viewer || viewer.role !== 'client') {
+            throw new ForbiddenException('Solo el cliente propietario puede ver las propuestas del job.');
+        }
+
+        const { data: job, error: jobError } = await this.supabase.client
+            .from('jobs')
+            .select('id, client_id')
+            .eq('id', jobId)
+            .maybeSingle();
+
+        if (jobError) throw jobError;
+        if (!job) {
+            throw new ForbiddenException('El job no existe.');
+        }
+        if (job.client_id !== viewer.id) {
+            throw new ForbiddenException('Solo el cliente propietario puede ver las propuestas del job.');
+        }
+
         const { data, error } = await this.supabase.client
             .from('proposals')
             .select(`
@@ -63,7 +88,7 @@ export class ProposalsService {
         dev:users(name, avatar_url, specialties, rating_avg),
         messages (
           *,
-          sender:users(name)
+          sender:users!messages_sender_id_fkey(name)
         )
       `)
             .eq('job_id', jobId)

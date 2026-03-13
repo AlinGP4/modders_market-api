@@ -31,14 +31,32 @@ export class JobsService {
       .from('jobs')
       .select(`
         *,
-        client:users(name, avatar_url),
-        proposals (
-          *,
-          dev:users(name, avatar_url, specialties, rating_avg)
-        )
+        client:users(name, avatar_url)
       `)
       .eq('id', id)
       .single();
+    if (error) throw error;
+    return data;
+  }
+
+  async findPublishedByClient(clientSupabaseId: string) {
+    const { data: user, error: userError } = await this.supabase.client
+      .from('users')
+      .select('id, role')
+      .eq('supabase_user_id', clientSupabaseId)
+      .maybeSingle();
+
+    if (userError) throw userError;
+    if (!user || user.role !== 'client') {
+      return [];
+    }
+
+    const { data, error } = await this.supabase.client
+      .from('jobs')
+      .select('*')
+      .eq('client_id', user.id)
+      .order('created_at', { ascending: false });
+
     if (error) throw error;
     return data;
   }
