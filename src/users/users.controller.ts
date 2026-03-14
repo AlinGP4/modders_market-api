@@ -27,6 +27,12 @@ import {
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'Lista perfiles publicos de usuarios' })
+  async findPublicProfiles() {
+    return this.usersService.findPublicProfiles();
+  }
+
   @Get('devs')
   @ApiOperation({ summary: 'Lista especialistas disponibles' })
   async findDevs() {

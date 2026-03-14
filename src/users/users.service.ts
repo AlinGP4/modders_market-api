@@ -16,6 +16,20 @@ export class UsersService {
     private readonly cloudflareR2: CloudflareR2Service,
   ) {}
 
+  async findPublicProfiles() {
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select(
+        'id, role, name, bio, specialties, games, discord, avatar_url, rating_avg, jobs_completed',
+      )
+      .order('rating_avg', { ascending: false, nullsFirst: false })
+      .order('jobs_completed', { ascending: false, nullsFirst: false })
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    return data;
+  }
+
   async findDevs() {
     const { data, error } = await this.supabase.client
       .from('users')

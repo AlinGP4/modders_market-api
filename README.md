@@ -21,7 +21,7 @@ Modelo de datos (inferido por consultas del backend):
 Tabla users:
 - id: string/uuid (PK interna app)
 - supabase_user_id: string/uuid (id del usuario en Supabase Auth)
-- role: 'client' | 'dev'
+- role: 'client' | 'dev' | 'admin'
 - name: string
 - bio: string nullable
 - specialties: string[] (especialidades)
@@ -91,16 +91,21 @@ Endpoints disponibles:
   - duration_days (number >=1, opcional)
 - Crea job con client_id derivado del usuario autenticado (users.supabase_user_id -> users.id)
 
-4) GET /users/devs
+4) GET /users
+- Publico
+- Lista perfiles publicos de usuarios
+- Campos: id, role, name, bio, specialties, games, discord, avatar_url, rating_avg, jobs_completed
+
+5) GET /users/devs
 - Público
 - Lista perfiles dev ordenados por rating_avg desc
 - Campos: id, name, bio, specialties, games, discord, rating_avg, jobs_completed
 
-5) GET /users/me
+6) GET /users/me
 - Protegido
 - Devuelve perfil completo del usuario autenticado (lookup por supabase_user_id)
 
-6) PATCH /users/me
+7) PATCH /users/me
 - Protegido
 - Actualiza perfil del usuario autenticado
 - Body esperado (DTO actual):
