@@ -13,12 +13,12 @@ export class CreateJobDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ example: 'fivem', enum: ['fivem', 'minecraft', 'gta'] })
+  @ApiProperty({ example: 'fivem', description: 'Tipo de juego libre. El frontend puede sugerir valores comunes.' })
   @IsNotEmpty()
   @IsString()
   game_type: string;
 
-  @ApiProperty({ example: 'script', enum: ['script', 'plugin', 'mlo', 'car', 'ui'] })
+  @ApiProperty({ example: 'script', description: 'Tipo de servicio libre. El frontend puede sugerir valores comunes.' })
   @IsNotEmpty()
   @IsString()
   task_type: string;
