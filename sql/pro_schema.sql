@@ -111,6 +111,17 @@ create table if not exists public.job_feed_comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.site_visits (
+  id uuid primary key default uuid_generate_v4(),
+  ip_address text not null unique,
+  first_path text,
+  last_path text,
+  user_agent text,
+  total_hits integer not null default 1,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
 create index if not exists users_role_idx on public.users (role);
 create index if not exists users_hide_idx on public.users (hide);
 create index if not exists jobs_client_id_idx on public.jobs (client_id);
@@ -125,6 +136,8 @@ create index if not exists messages_receiver_id_idx on public.messages (receiver
 create index if not exists job_feed_comments_job_id_idx on public.job_feed_comments (job_id);
 create index if not exists job_feed_comments_author_id_idx on public.job_feed_comments (author_id);
 create index if not exists job_feed_comments_created_at_idx on public.job_feed_comments (created_at asc);
+create index if not exists site_visits_last_seen_at_idx on public.site_visits (last_seen_at desc);
+create index if not exists site_visits_first_seen_at_idx on public.site_visits (first_seen_at desc);
 
 drop trigger if exists on_auth_user_created on auth.users;
 
