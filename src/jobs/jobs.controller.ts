@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateJobDto } from './dto/create-job.dto';
+import { CreateJobFeedCommentDto } from './dto/create-job-feed-comment.dto';
 import { JobsService } from './jobs.service';
 
 @ApiTags('jobs')
@@ -20,9 +21,15 @@ export class JobsController {
   @Get('me/published')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Jobs publicados por el cliente autenticado' })
+  @ApiOperation({ summary: 'Jobs publicados por el usuario autenticado' })
   async findMine(@Request() req: any) {
-    return this.jobsService.findPublishedByClient(req.user.id);
+    return this.jobsService.findPublishedByUser(req.user.id);
+  }
+
+  @Get(':id/feed')
+  @ApiOperation({ summary: 'Comentarios publicos del feed del job' })
+  async findFeed(@Param('id') id: string) {
+    return this.jobsService.findFeed(id);
   }
 
   @Get(':id')
@@ -36,5 +43,13 @@ export class JobsController {
   @ApiOperation({ summary: 'Crear nuevo job (solo clients)' })
   async create(@Body() createJobDto: CreateJobDto, @Request() req: any) {
     return this.jobsService.create(createJobDto, req.user.id);
+  }
+
+  @Post(':id/feed/comments')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Publicar comentario publico en el feed del job' })
+  async addFeedComment(@Param('id') id: string, @Body() dto: CreateJobFeedCommentDto, @Request() req: any) {
+    return this.jobsService.addFeedComment(id, req.user.id, dto);
   }
 }

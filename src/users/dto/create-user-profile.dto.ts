@@ -1,6 +1,6 @@
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsArray, ArrayMinSize } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsArray, ArrayMinSize, IsIn } from 'class-validator';
 
 export class CreateUserProfileDto {
   @ApiProperty({ example: 'JokerDev' })
@@ -38,4 +38,15 @@ export class CreateUserProfileDto {
   @IsOptional()
   @IsString()
   avatar_url?: string;
+
+  @ApiProperty({
+    example: 'dev',
+    required: false,
+    enum: ['client', 'dev'],
+    description: 'Rol editable por el propio usuario. Admin sigue siendo manual.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['client', 'dev'])
+  role?: 'client' | 'dev';
 }

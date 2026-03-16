@@ -60,16 +60,21 @@ export class UsersService {
   async updateProfile(supabaseUserId: string, dto: CreateUserProfileDto) {
     const { data: existingUser, error: findError } = await this.supabase.client
       .from('users')
-      .select('id')
+      .select('id, role')
       .eq('supabase_user_id', supabaseUserId)
       .maybeSingle();
 
     if (findError) throw findError;
 
+    const payload: CreateUserProfileDto = { ...dto };
+    if (existingUser?.role === 'admin') {
+      delete payload.role;
+    }
+
     if (existingUser) {
       const { data, error } = await this.supabase.client
         .from('users')
-        .update(dto)
+        .update(payload)
         .eq('id', existingUser.id)
         .select()
         .maybeSingle();
@@ -83,14 +88,14 @@ export class UsersService {
       return data;
     }
 
-    const payload = {
+    const insertPayload = {
       supabase_user_id: supabaseUserId,
-      ...dto,
+      ...payload,
     };
 
     const { data, error } = await this.supabase.client
       .from('users')
-      .insert(payload)
+      .insert(insertPayload)
       .select()
       .maybeSingle();
 
