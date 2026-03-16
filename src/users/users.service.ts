@@ -31,6 +31,24 @@ export class UsersService {
     return data;
   }
 
+  async findPublicProfileById(userId: string) {
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select(
+        'id, role, name, bio, specialties, games, discord, avatar_url, rating_avg, jobs_completed, portfolio_links',
+      )
+      .eq('id', userId)
+      .neq('role', 'admin')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      throw new NotFoundException('Public profile not found.');
+    }
+
+    return data;
+  }
+
   async findDevs() {
     const { data, error } = await this.supabase.client
       .from('users')

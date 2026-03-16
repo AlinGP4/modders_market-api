@@ -4,6 +4,7 @@ import {
   Get,
   Patch,
   Body,
+  Param,
   UseGuards,
   Request,
   Post,
@@ -73,5 +74,11 @@ export class UsersController {
     @Request() req: any,
   ) {
     return this.usersService.uploadAvatar(req.user.id, file);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Detalle de perfil publico de usuario' })
+  async findPublicProfile(@Param('id') id: string) {
+    return this.usersService.findPublicProfileById(id);
   }
 }
