@@ -22,6 +22,7 @@ export class UsersService {
       .select(
         'id, role, name, bio, specialties, games, discord, avatar_url, rating_avg, jobs_completed',
       )
+      .neq('role', 'admin')
       .order('rating_avg', { ascending: false, nullsFirst: false })
       .order('jobs_completed', { ascending: false, nullsFirst: false })
       .order('name', { ascending: true });
