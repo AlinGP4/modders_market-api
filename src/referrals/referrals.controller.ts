@@ -28,6 +28,14 @@ export class ReferralsController {
     return this.referralsService.updateMine(req.user.id, body ?? {});
   }
 
+  @Get('me/dashboard')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get personal referral dashboard' })
+  async getMyDashboard(@Request() req: any) {
+    return this.referralsService.getMyDashboard(req.user.id);
+  }
+
   @Get('admin/campaigns')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
@@ -45,6 +53,14 @@ export class ReferralsController {
     @Body() body: { code?: string | null; label?: string | null },
   ) {
     return this.referralsService.createCampaign(req.user.id, body ?? {});
+  }
+
+  @Get('admin/dashboard')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get admin referral dashboard' })
+  async getAdminDashboard(@Request() req: any) {
+    return this.referralsService.getAdminDashboard(req.user.id);
   }
 
   @Post('track-visit')
