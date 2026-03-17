@@ -47,6 +47,22 @@ export class UsersController {
     return this.usersService.findProfile(req.user.id);
   }
 
+  @Get('admin/list')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lista completa de usuarios para admin' })
+  async findAllForAdmin(@Request() req: any) {
+    return this.usersService.findAllForAdmin(req.user.id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Detalle de usuario para admin' })
+  async findAdminProfile(@Param('id') id: string, @Request() req: any) {
+    return this.usersService.findAdminProfileById(req.user.id, id);
+  }
+
   @Patch('me')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()

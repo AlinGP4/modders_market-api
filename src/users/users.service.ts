@@ -31,6 +31,18 @@ export class UsersService {
     return data;
   }
 
+  async findAllForAdmin(viewerSupabaseUserId: string) {
+    await this.assertAdmin(viewerSupabaseUserId);
+
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select('id, name, role, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
   async findPublicProfileById(userId: string) {
     const { data, error } = await this.supabase.client
       .from('users')
@@ -44,6 +56,25 @@ export class UsersService {
     if (error) throw error;
     if (!data) {
       throw new NotFoundException('Public profile not found.');
+    }
+
+    return data;
+  }
+
+  async findAdminProfileById(viewerSupabaseUserId: string, userId: string) {
+    await this.assertAdmin(viewerSupabaseUserId);
+
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select(
+        'id, email, role, name, bio, specialties, games, discord, avatar_url, rating_avg, jobs_completed, portfolio_links, created_at',
+      )
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      throw new NotFoundException('User not found.');
     }
 
     return data;
@@ -203,6 +234,20 @@ export class UsersService {
         .toBuffer();
     } catch {
       throw new BadRequestException('No se pudo procesar la imagen del avatar.');
+    }
+  }
+
+  private async assertAdmin(viewerSupabaseUserId: string): Promise<void> {
+    const { data, error } = await this.supabase.client
+      .from('users')
+      .select('role')
+      .eq('supabase_user_id', viewerSupabaseUserId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data || data.role !== 'admin') {
+      throw new ForbiddenException('Only admins can access this section.');
     }
   }
 }
