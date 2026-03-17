@@ -6,6 +6,10 @@ export interface VisitSummary {
   total_unique_visitors: number;
   new_visitors_today: number;
   active_visitors_last_24h: number;
+  daily_new_visitors: Array<{
+    date: string;
+    count: number;
+  }>;
   latest_visit: {
     path: string | null;
     seen_at: string | null;
@@ -74,11 +78,15 @@ export class AnalyticsService {
     startOfToday.setHours(0, 0, 0, 0);
 
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const seriesStart = new Date();
+    seriesStart.setHours(0, 0, 0, 0);
+    seriesStart.setDate(seriesStart.getDate() - 13);
 
     const [
       { count: totalUnique, error: totalError },
       { count: todayUnique, error: todayError },
       { count: activeLast24h, error: activeError },
+      seriesResponse,
       latestResponse,
     ] = await Promise.all([
       this.supabase.client.from('site_visits').select('*', { head: true, count: 'exact' }),
@@ -90,6 +98,11 @@ export class AnalyticsService {
         .from('site_visits')
         .select('*', { head: true, count: 'exact' })
         .gte('last_seen_at', last24Hours.toISOString()),
+      this.supabase.client
+        .from('site_visits')
+        .select('first_seen_at')
+        .gte('first_seen_at', seriesStart.toISOString())
+        .order('first_seen_at', { ascending: true }),
       this.supabase.client
         .from('site_visits')
         .select('last_path, last_seen_at')
@@ -110,6 +123,10 @@ export class AnalyticsService {
       throw activeError;
     }
 
+    if (seriesResponse.error) {
+      throw seriesResponse.error;
+    }
+
     if (latestResponse.error) {
       throw latestResponse.error;
     }
@@ -118,6 +135,7 @@ export class AnalyticsService {
       total_unique_visitors: totalUnique ?? 0,
       new_visitors_today: todayUnique ?? 0,
       active_visitors_last_24h: activeLast24h ?? 0,
+      daily_new_visitors: this.buildDailyNewVisitorsSeries(seriesStart, seriesResponse.data ?? []),
       latest_visit: {
         path: latestResponse.data?.last_path ?? null,
         seen_at: latestResponse.data?.last_seen_at ?? null,
@@ -157,5 +175,30 @@ export class AnalyticsService {
     const value = Array.isArray(userAgent) ? userAgent[0] : userAgent;
     const trimmed = value?.trim();
     return trimmed ? trimmed.slice(0, 500) : null;
+  }
+
+  private buildDailyNewVisitorsSeries(
+    startDate: Date,
+    rows: Array<{ first_seen_at: string }>,
+  ): Array<{ date: string; count: number }> {
+    const counts = new Map<string, number>();
+
+    rows.forEach((row) => {
+      const key = row.first_seen_at.slice(0, 10);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+
+    const days: Array<{ date: string; count: number }> = [];
+    for (let offset = 0; offset < 14; offset += 1) {
+      const current = new Date(startDate);
+      current.setDate(startDate.getDate() + offset);
+      const key = current.toISOString().slice(0, 10);
+      days.push({
+        date: key,
+        count: counts.get(key) ?? 0,
+      });
+    }
+
+    return days;
   }
 }
