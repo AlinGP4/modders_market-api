@@ -67,16 +67,17 @@ export class ChatsService {
     const viewer = await this.findViewer(viewerSupabaseUserId);
     const trimmed = query?.trim();
 
+    if (!trimmed) {
+      return [];
+    }
+
     let request = this.supabase.client
       .from('users')
       .select('id, name, avatar_url, role, bio')
       .neq('id', viewer.id)
       .order('name', { ascending: true })
       .limit(12);
-
-    if (trimmed) {
-      request = request.ilike('name', `%${trimmed}%`);
-    }
+    request = request.ilike('name', `%${trimmed}%`);
 
     const { data, error } = await request;
     if (error) {
