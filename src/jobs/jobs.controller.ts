@@ -1,8 +1,27 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Request,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
-import { CreateJobDto } from './dto/create-job.dto';
 import { CreateJobFeedCommentDto } from './dto/create-job-feed-comment.dto';
+import { CreateJobFormDto } from './dto/create-job-form.dto';
 import { JobsService } from './jobs.service';
 
 @ApiTags('jobs')
@@ -40,9 +59,35 @@ export class JobsController {
   @Post()
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Crear nuevo job (solo clients)' })
-  async create(@Body() createJobDto: CreateJobDto, @Request() req: any) {
-    return this.jobsService.create(createJobDto, req.user.id);
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        game_type: { type: 'string' },
+        task_type: { type: 'string' },
+        budget_min: { type: 'number' },
+        budget_max: { type: 'number' },
+        duration_days: { type: 'number' },
+        cover_image_index: { type: 'number' },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+      },
+      required: ['title', 'game_type', 'task_type'],
+    },
+  })
+  @UseInterceptors(FilesInterceptor('images', 6))
+  async create(
+    @Body() createJobDto: CreateJobFormDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @Request() req: any,
+  ) {
+    return this.jobsService.create(createJobDto, files, req.user.id);
   }
 
   @Post(':id/feed/comments')

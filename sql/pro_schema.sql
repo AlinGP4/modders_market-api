@@ -63,6 +63,8 @@ create table if not exists public.jobs (
   description text,
   game_type text not null,
   task_type text not null,
+  job_images jsonb not null default '[]'::jsonb,
+  cover_image_url text,
   budget_min integer,
   budget_max integer,
   duration_days integer,

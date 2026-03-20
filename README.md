@@ -39,6 +39,8 @@ Tabla jobs:
 - description: string nullable
 - game_type: string (valores usados: fivem, minecraft, gta)
 - task_type: string (valores usados: script, plugin, mlo, car, ui)
+- job_images: string[] (urls publicas optimizadas en Cloudflare R2)
+- cover_image_url: string nullable
 - budget_min: number nullable
 - budget_max: number nullable
 - duration_days: number nullable
@@ -81,7 +83,7 @@ Endpoints disponibles:
 
 3) POST /jobs
 - Protegido (Bearer token)
-- Body:
+- `multipart/form-data`:
   - title (string, requerido)
   - description (string, opcional)
   - game_type (string, requerido)
@@ -89,6 +91,8 @@ Endpoints disponibles:
   - budget_min (number >=10, opcional)
   - budget_max (number >=10, opcional)
   - duration_days (number >=1, opcional)
+  - cover_image_index (number >=0, opcional)
+  - images[] (archivos opcionales: JPG/PNG/WEBP/AVIF, max 6, optimizadas a WEBP y publicadas en Cloudflare R2)
 - Crea job con client_id derivado del usuario autenticado (users.supabase_user_id -> users.id)
 
 4) GET /users
