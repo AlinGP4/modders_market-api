@@ -6,10 +6,15 @@ import {
   Post,
   Query,
   Request,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiBody,
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiQuery,
   ApiTags,
@@ -64,11 +69,23 @@ export class ChatsController {
 
   @Post(':conversationId/messages')
   @ApiOperation({ summary: 'Send a message inside a direct conversation' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string' },
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('image'))
   async addMessage(
     @Param('conversationId') conversationId: string,
     @Body() dto: CreateDirectMessageDto,
+    @UploadedFile() image: Express.Multer.File | undefined,
     @Request() req: any,
   ) {
-    return this.chatsService.addMessage(conversationId, dto, req.user.id);
+    return this.chatsService.addMessage(conversationId, dto, req.user.id, image);
   }
 }

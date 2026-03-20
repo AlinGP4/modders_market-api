@@ -5,8 +5,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import sharp from 'sharp';
+import { CloudflareR2Service } from '../storage/cloudflare-r2.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateDirectMessageDto } from './dto/create-direct-message.dto';
+
+const MAX_CHAT_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+const SUPPORTED_CHAT_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+]);
+const CHAT_IMAGE_MAX_DIMENSION_PX = 1600;
+const CHAT_IMAGE_WEBP_QUALITY = 78;
 
 type ChatParticipant = {
   id: string;
@@ -19,6 +31,7 @@ type DirectMessage = {
   id: string;
   conversation_id: string;
   content: string;
+  image_url: string | null;
   created_at: string;
   sender: ChatParticipant;
 };
@@ -46,7 +59,10 @@ type ChatContact = {
 
 @Injectable()
 export class ChatsService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly cloudflareR2: CloudflareR2Service,
+  ) {}
 
   async listConversations(
     viewerSupabaseUserId: string,
@@ -207,12 +223,19 @@ export class ChatsService {
     conversationId: string,
     dto: CreateDirectMessageDto,
     viewerSupabaseUserId: string,
+    image: Express.Multer.File | undefined,
   ): Promise<DirectConversationDetail> {
     const viewer = await this.findViewer(viewerSupabaseUserId);
     await this.assertParticipant(conversationId, viewer.id);
 
-    const content = dto.content.trim();
-    if (!content) {
+    const content = dto.content?.trim() ?? '';
+    const imageUrl = await this.processMessageImage(
+      viewerSupabaseUserId,
+      conversationId,
+      image,
+    );
+
+    if (!content && !imageUrl) {
       throw new BadRequestException('Message content cannot be empty.');
     }
 
@@ -223,6 +246,7 @@ export class ChatsService {
         conversation_id: conversationId,
         sender_id: viewer.id,
         content,
+        image_url: imageUrl,
       });
 
     if (error) {
@@ -360,7 +384,7 @@ export class ChatsService {
     const { data, error } = await this.supabase.client
       .from('direct_messages')
       .select(
-        'id, conversation_id, content, created_at, sender:users!direct_messages_sender_id_fkey(id, name, avatar_url, role)',
+        'id, conversation_id, content, image_url, created_at, sender:users!direct_messages_sender_id_fkey(id, name, avatar_url, role)',
       )
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: true });
@@ -381,6 +405,7 @@ export class ChatsService {
         id: row.id,
         conversation_id: row.conversation_id,
         content: row.content,
+        image_url: row.image_url ?? null,
         created_at: row.created_at,
         sender: {
           id: sender.id,
@@ -401,6 +426,64 @@ export class ChatsService {
       limited.set(conversationId, rows.slice(-perConversation));
     }
     return limited;
+  }
+
+  private async processMessageImage(
+    viewerSupabaseUserId: string,
+    conversationId: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<string | null> {
+    if (!file) {
+      return null;
+    }
+
+    this.validateMessageImage(file);
+    const optimizedBuffer = await this.optimizeMessageImage(file.buffer);
+    const originalBaseName =
+      (file.originalname || 'chat-image').replace(/\.[^/.]+$/, '') ||
+      'chat-image';
+
+    return this.cloudflareR2.uploadChatImage({
+      supabaseUserId: viewerSupabaseUserId,
+      conversationId,
+      originalName: `${originalBaseName}.webp`,
+      mimeType: 'image/webp',
+      fileBuffer: optimizedBuffer,
+    });
+  }
+
+  private validateMessageImage(file: Express.Multer.File): void {
+    if (!SUPPORTED_CHAT_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Unsupported image format. Use JPG, PNG, WEBP or AVIF.',
+      );
+    }
+
+    if (file.size > MAX_CHAT_IMAGE_SIZE_BYTES) {
+      throw new BadRequestException('Chat images must be smaller than 8MB.');
+    }
+
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Could not read the uploaded chat image.');
+    }
+  }
+
+  private async optimizeMessageImage(fileBuffer: Buffer): Promise<Buffer> {
+    try {
+      return await sharp(fileBuffer, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize(CHAT_IMAGE_MAX_DIMENSION_PX, CHAT_IMAGE_MAX_DIMENSION_PX, {
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({
+          quality: CHAT_IMAGE_WEBP_QUALITY,
+          effort: 5,
+        })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException('Could not process the chat image.');
+    }
   }
 
   private async assertParticipant(

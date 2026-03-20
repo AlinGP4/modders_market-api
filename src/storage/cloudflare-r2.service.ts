@@ -10,6 +10,7 @@ export class CloudflareR2Service {
   private readonly publicBaseUrl: string;
   private readonly avatarPrefix: string;
   private readonly jobPrefix: string;
+  private readonly chatPrefix: string;
   private readonly client: S3Client | null;
 
   constructor(private readonly configService: ConfigService) {
@@ -25,6 +26,10 @@ export class CloudflareR2Service {
       (this.configService.get<string>('CLOUDFLARE_R2_JOB_PREFIX') ?? 'jobs')
         .trim()
         .replace(/^\/+|\/+$/g, '') || 'jobs';
+    this.chatPrefix =
+      (this.configService.get<string>('CLOUDFLARE_R2_CHAT_PREFIX') ?? 'chats')
+        .trim()
+        .replace(/^\/+|\/+$/g, '') || 'chats';
 
     const accountId = (this.configService.get<string>('CLOUDFLARE_R2_ACCOUNT_ID') ?? '').trim();
     const accessKeyId = (
@@ -98,6 +103,30 @@ export class CloudflareR2Service {
     return `${this.publicBaseUrl}/${key}`;
   }
 
+  async uploadChatImage(params: {
+    supabaseUserId: string;
+    conversationId: string;
+    originalName: string;
+    mimeType: string;
+    fileBuffer: Buffer;
+  }): Promise<string> {
+    if (!this.client || !this.bucketName || !this.publicBaseUrl) {
+      throw new InternalServerErrorException(
+        'Cloudflare R2 is not configured. Set CLOUDFLARE_R2_* variables in .env.',
+      );
+    }
+
+    const key = this.buildChatImageKey(
+      params.supabaseUserId,
+      params.conversationId,
+      params.originalName,
+      params.mimeType,
+    );
+    await this.uploadObject(key, params.fileBuffer, params.mimeType);
+
+    return `${this.publicBaseUrl}/${key}`;
+  }
+
   private async uploadObject(key: string, fileBuffer: Buffer, mimeType: string): Promise<void> {
     if (!this.client || !this.bucketName) {
       throw new InternalServerErrorException(
@@ -150,6 +179,27 @@ export class CloudflareR2Service {
     const extension = this.resolveFileExtension(originalName, mimeType);
     const uniqueSuffix = `${Date.now()}-${randomUUID().split('-')[0]}`;
     return `${this.jobPrefix}/${safeUserId}/${safeJobId}/${uniqueSuffix}-${safeBaseName}${extension}`;
+  }
+
+  private buildChatImageKey(
+    supabaseUserId: string,
+    conversationId: string,
+    originalName: string,
+    mimeType: string,
+  ): string {
+    const safeUserId = supabaseUserId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeConversationId = conversationId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const baseNameWithoutExt = originalName.replace(/\.[^/.]+$/, '');
+    const safeBaseName =
+      baseNameWithoutExt
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60) || 'chat-image';
+
+    const extension = this.resolveFileExtension(originalName, mimeType);
+    const uniqueSuffix = `${Date.now()}-${randomUUID().split('-')[0]}`;
+    return `${this.chatPrefix}/${safeUserId}/${safeConversationId}/${uniqueSuffix}-${safeBaseName}${extension}`;
   }
 
   private resolveFileExtension(originalName: string, mimeType: string): string {

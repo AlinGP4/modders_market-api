@@ -17,8 +17,12 @@ create table if not exists public.direct_messages (
   conversation_id uuid not null references public.direct_conversations(id) on delete cascade,
   sender_id uuid not null references public.users(id) on delete cascade,
   content text not null,
+  image_url text null,
   created_at timestamptz not null default now()
 );
+
+alter table public.direct_messages
+  add column if not exists image_url text null;
 
 create index if not exists direct_conversation_participants_user_idx
   on public.direct_conversation_participants(user_id, created_at desc);

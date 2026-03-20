@@ -1,8 +1,8 @@
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateDirectMessageDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(2000)
-  content: string;
+  content?: string;
 }
