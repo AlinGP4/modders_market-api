@@ -32,8 +32,14 @@ export class JobsController {
   @Get()
   @ApiOperation({ summary: 'Listar jobs abiertos + filtros' })
   @ApiQuery({ name: 'game_type', enum: ['fivem', 'minecraft'] })
-  @ApiQuery({ name: 'task_type', enum: ['script', 'plugin', 'mlo', 'car', 'ui'] })
-  async findAll(@Query('game_type') gameType?: string, @Query('task_type') taskType?: string) {
+  @ApiQuery({
+    name: 'task_type',
+    enum: ['script', 'plugin', 'mlo', 'car', 'ui'],
+  })
+  async findAll(
+    @Query('game_type') gameType?: string,
+    @Query('task_type') taskType?: string,
+  ) {
     return this.jobsService.findAll({ gameType, taskType });
   }
 
@@ -43,6 +49,14 @@ export class JobsController {
   @ApiOperation({ summary: 'Jobs publicados por el usuario autenticado' })
   async findMine(@Request() req: any) {
     return this.jobsService.findPublishedByUser(req.user.id);
+  }
+
+  @Get('admin/summary')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resumen admin de jobs y actividad reciente' })
+  async getAdminSummary(@Request() req: any) {
+    return this.jobsService.getAdminSummary(req.user.id);
   }
 
   @Get(':id/feed')
@@ -94,7 +108,11 @@ export class JobsController {
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Publicar comentario publico en el feed del job' })
-  async addFeedComment(@Param('id') id: string, @Body() dto: CreateJobFeedCommentDto, @Request() req: any) {
+  async addFeedComment(
+    @Param('id') id: string,
+    @Body() dto: CreateJobFeedCommentDto,
+    @Request() req: any,
+  ) {
     return this.jobsService.addFeedComment(id, req.user.id, dto);
   }
 }
