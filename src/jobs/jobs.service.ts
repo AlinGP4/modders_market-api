@@ -20,7 +20,8 @@ const SUPPORTED_JOB_IMAGE_MIME_TYPES = new Set([
   'image/webp',
   'image/avif',
 ]);
-const JOB_IMAGE_MAX_DIMENSION_PX = 1600;
+const JOB_IMAGE_MAX_DIMENSION_PX = 1200;
+const JOB_IMAGE_WEBP_QUALITY = 74;
 
 @Injectable()
 export class JobsService {
@@ -252,7 +253,7 @@ export class JobsService {
           withoutEnlargement: true,
         })
         .webp({
-          quality: 82,
+          quality: JOB_IMAGE_WEBP_QUALITY,
           effort: 5,
         })
         .toBuffer();
