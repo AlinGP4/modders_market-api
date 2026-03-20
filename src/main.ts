@@ -7,10 +7,37 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
+  const allowedOrigins = new Set([
+    'http://localhost:4200',
+    'http://localhost:3000',
+    'https://modders-market.com',
+    'https://www.modders-market.com',
+    'https://api.modders-market.com',
+  ]);
+
   app.enableCors({
-    origin: ['http://localhost:4200', 'http://localhost:3000','https://www.modders-market.com','https://modders-market.com'],
-    credentials: true
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (
+        allowedOrigins.has(origin) ||
+        /^https:\/\/([a-z0-9-]+\.)?modders-market\.com$/i.test(origin)
+      ) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked for origin: ${origin}`), false);
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
+    optionsSuccessStatus: 204,
   });
 
   // ConfigService para .env
