@@ -619,7 +619,7 @@ export class ReferralsService {
 
     const { data, error } = await this.supabase.client
       .from('referral_campaign_users')
-      .select('referral_link_id, user:users(id, name, role)')
+      .select('referral_link_id, user:users!referral_campaign_users_user_id_fkey(id, name, role)')
       .in('referral_link_id', referralLinkIds)
       .order('created_at', { ascending: true });
 
