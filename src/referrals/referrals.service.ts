@@ -20,6 +20,7 @@ export interface CampaignReferralRecord {
   label: string | null;
   created_at: string;
   updated_at: string;
+  assigned_users: CampaignAssignedUserRecord[];
 }
 
 export interface ReferralStatsRecord {
@@ -46,6 +47,7 @@ export interface MyReferralDashboardRecord {
   link: ReferralLinkRecord;
   stats: ReferralStatsRecord;
   recent_events: ReferralRecentEventRecord[];
+  assigned_campaigns: AssignedCampaignReferralRecord[];
 }
 
 export interface ReferralLeaderboardEntryRecord {
@@ -62,6 +64,16 @@ export interface CampaignReferralDashboardRecord extends CampaignReferralRecord 
   visits: number;
   attributed_users: number;
   conversion_rate: number;
+}
+
+export interface CampaignAssignedUserRecord {
+  id: string;
+  name: string;
+  role: 'client' | 'dev' | 'admin';
+}
+
+export interface AssignedCampaignReferralRecord extends CampaignReferralDashboardRecord {
+  stats: ReferralStatsRecord;
 }
 
 export interface AdminReferralDashboardRecord {
@@ -100,6 +112,11 @@ interface ReferralEventRow {
 interface ReferralEventTargetUserRow {
   id: string;
   name: string;
+}
+
+interface CampaignAssignmentRow {
+  referral_link_id: string;
+  user: CampaignAssignedUserRecord | CampaignAssignedUserRecord[] | null;
 }
 
 @Injectable()
@@ -148,6 +165,7 @@ export class ReferralsService {
     const link = await this.getOrCreateUserReferralRow(user.id);
     const events = await this.listEventsByReferralLinkIds([link.id], 12);
     const targetUsers = await this.listTargetUsers(events);
+    const assignedCampaigns = await this.listAssignedCampaigns(user.id);
 
     return {
       link: this.mapReferralLinkRecord(link),
@@ -160,6 +178,7 @@ export class ReferralsService {
         ip_address: event.ip_address,
         target_user: event.target_user_id ? targetUsers.get(event.target_user_id) ?? null : null,
       })),
+      assigned_campaigns: assignedCampaigns,
     };
   }
 
@@ -177,12 +196,18 @@ export class ReferralsService {
       throw error;
     }
 
-    return data ?? [];
+    const campaigns = data ?? [];
+    const assignments = await this.listCampaignAssignments(campaigns.map((campaign) => campaign.id));
+
+    return campaigns.map((campaign) => ({
+      ...campaign,
+      assigned_users: assignments.get(campaign.id) ?? [],
+    }));
   }
 
   async createCampaign(
     viewerSupabaseUserId: string,
-    payload: { code?: string | null; label?: string | null },
+    payload: { code?: string | null; label?: string | null; user_ids?: string[] | null },
   ): Promise<CampaignReferralRecord> {
     const admin = await this.assertAdmin(viewerSupabaseUserId);
     const nextCode = payload.code?.trim()
@@ -210,7 +235,30 @@ export class ReferralsService {
       throw new BadRequestException('Could not create campaign referral code.');
     }
 
-    return data;
+    await this.syncCampaignUsers(data.id, admin.id, payload.user_ids ?? []);
+    const assignments = await this.listCampaignAssignments([data.id]);
+
+    return {
+      ...data,
+      assigned_users: assignments.get(data.id) ?? [],
+    };
+  }
+
+  async updateCampaignUsers(
+    viewerSupabaseUserId: string,
+    campaignId: string,
+    payload: { user_ids?: string[] | null },
+  ): Promise<CampaignReferralRecord> {
+    const admin = await this.assertAdmin(viewerSupabaseUserId);
+    const campaign = await this.findOwnedCampaignById(campaignId, admin.id);
+
+    await this.syncCampaignUsers(campaign.id, admin.id, payload.user_ids ?? []);
+    const assignments = await this.listCampaignAssignments([campaign.id]);
+
+    return {
+      ...campaign,
+      assigned_users: assignments.get(campaign.id) ?? [],
+    };
   }
 
   async getAdminDashboard(viewerSupabaseUserId: string): Promise<AdminReferralDashboardRecord> {
@@ -227,6 +275,7 @@ export class ReferralsService {
 
     const userLinks = links.filter((link) => link.kind === 'user' && !!link.user_id);
     const campaignLinks = links.filter((link) => link.kind === 'campaign');
+    const campaignAssignments = await this.listCampaignAssignments(campaignLinks.map((link) => link.id));
 
     const topReferrers = userLinks
       .map((link) => {
@@ -267,6 +316,7 @@ export class ReferralsService {
           label: link.label,
           created_at: link.created_at,
           updated_at: link.updated_at,
+          assigned_users: campaignAssignments.get(link.id) ?? [],
           visits: stats.visits,
           attributed_users: stats.attributed_users,
           conversion_rate: stats.conversion_rate,
@@ -529,6 +579,26 @@ export class ReferralsService {
     return data;
   }
 
+  private async findOwnedCampaignById(campaignId: string, adminUserId: string): Promise<ReferralLinkRow> {
+    const { data, error } = await this.supabase.client
+      .from('referral_links')
+      .select('id, user_id, code, kind, label, created_by_user_id, created_at, updated_at')
+      .eq('id', campaignId)
+      .eq('kind', 'campaign')
+      .eq('created_by_user_id', adminUserId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new NotFoundException('Campaign referral code not found.');
+    }
+
+    return data;
+  }
+
   private async listAllReferralLinks(): Promise<ReferralLinkRow[]> {
     const { data, error } = await this.supabase.client
       .from('referral_links')
@@ -540,6 +610,115 @@ export class ReferralsService {
     }
 
     return data ?? [];
+  }
+
+  private async listCampaignAssignments(referralLinkIds: string[]): Promise<Map<string, CampaignAssignedUserRecord[]>> {
+    if (!referralLinkIds.length) {
+      return new Map();
+    }
+
+    const { data, error } = await this.supabase.client
+      .from('referral_campaign_users')
+      .select('referral_link_id, user:users(id, name, role)')
+      .in('referral_link_id', referralLinkIds)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    const assignments = new Map<string, CampaignAssignedUserRecord[]>();
+    for (const row of (data ?? []) as CampaignAssignmentRow[]) {
+      const user = Array.isArray(row.user) ? row.user[0] : row.user;
+      if (!user) {
+        continue;
+      }
+
+      const list = assignments.get(row.referral_link_id) ?? [];
+      list.push(user);
+      assignments.set(row.referral_link_id, list);
+    }
+
+    return assignments;
+  }
+
+  private async listAssignedCampaigns(userId: string): Promise<AssignedCampaignReferralRecord[]> {
+    const { data, error } = await this.supabase.client
+      .from('referral_campaign_users')
+      .select(
+        'referral_link_id, campaign:referral_links!referral_campaign_users_referral_link_id_fkey(id, code, label, created_at, updated_at)',
+      )
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    const campaignRows = (data ?? [])
+      .map((row) => {
+        const campaign = Array.isArray((row as { campaign?: unknown[] | unknown }).campaign)
+          ? ((row as { campaign?: unknown[] | unknown }).campaign as unknown[])[0]
+          : (row as { campaign?: unknown[] | unknown }).campaign;
+
+        if (!campaign || typeof campaign !== 'object') {
+          return null;
+        }
+
+        const typedCampaign = campaign as {
+          id: string;
+          code: string;
+          label: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+
+        return {
+          id: typedCampaign.id,
+          code: typedCampaign.code,
+          label: typedCampaign.label,
+          created_at: typedCampaign.created_at,
+          updated_at: typedCampaign.updated_at,
+        };
+      })
+      .filter(
+        (
+          campaign,
+        ): campaign is Pick<CampaignReferralRecord, 'id' | 'code' | 'label' | 'created_at' | 'updated_at'> =>
+          !!campaign,
+      );
+
+    if (!campaignRows.length) {
+      return [];
+    }
+
+    const events = await this.listEventsByReferralLinkIds(
+      campaignRows.map((campaign) => campaign.id),
+      0,
+    );
+    const statsByLinkId = this.buildStatsByLink(events);
+
+    return campaignRows
+      .map((campaign) => {
+        const stats = statsByLinkId.get(campaign.id) ?? this.emptyStats();
+        return {
+          ...campaign,
+          assigned_users: [],
+          visits: stats.visits,
+          attributed_users: stats.attributed_users,
+          conversion_rate: stats.conversion_rate,
+          stats,
+        } satisfies AssignedCampaignReferralRecord;
+      })
+      .sort((a, b) => {
+        if (b.attributed_users !== a.attributed_users) {
+          return b.attributed_users - a.attributed_users;
+        }
+        if (b.visits !== a.visits) {
+          return b.visits - a.visits;
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
   }
 
   private async listEventsByReferralLinkIds(
@@ -592,6 +771,69 @@ export class ReferralsService {
     }
 
     return (data ?? []) as Array<{ id: string; name: string; role: 'client' | 'dev' | 'admin' }>;
+  }
+
+  private async syncCampaignUsers(campaignId: string, adminUserId: string, userIds: string[]): Promise<void> {
+    const normalizedUserIds = [
+      ...new Set((userIds ?? []).map((value) => value?.trim()).filter((value): value is string => !!value)),
+    ];
+
+    if (normalizedUserIds.length) {
+      const { data: users, error: usersError } = await this.supabase.client
+        .from('users')
+        .select('id')
+        .in('id', normalizedUserIds);
+
+      if (usersError) {
+        throw usersError;
+      }
+
+      const foundIds = new Set((users ?? []).map((user) => user.id));
+      const missingIds = normalizedUserIds.filter((id) => !foundIds.has(id));
+      if (missingIds.length) {
+        throw new BadRequestException('Some assigned users no longer exist.');
+      }
+    }
+
+    const { data: existing, error: existingError } = await this.supabase.client
+      .from('referral_campaign_users')
+      .select('user_id')
+      .eq('referral_link_id', campaignId);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existingIds = new Set((existing ?? []).map((row) => row.user_id));
+    const nextIds = new Set(normalizedUserIds);
+    const userIdsToInsert = normalizedUserIds.filter((id) => !existingIds.has(id));
+    const userIdsToDelete = [...existingIds].filter((id) => !nextIds.has(id));
+
+    if (userIdsToInsert.length) {
+      const { error: insertError } = await this.supabase.client.from('referral_campaign_users').insert(
+        userIdsToInsert.map((userId) => ({
+          referral_link_id: campaignId,
+          user_id: userId,
+          assigned_by_user_id: adminUserId,
+        })),
+      );
+
+      if (insertError) {
+        throw insertError;
+      }
+    }
+
+    if (userIdsToDelete.length) {
+      const { error: deleteError } = await this.supabase.client
+        .from('referral_campaign_users')
+        .delete()
+        .eq('referral_link_id', campaignId)
+        .in('user_id', userIdsToDelete);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+    }
   }
 
   private buildStats(events: ReferralEventRow[]): ReferralStatsRecord {

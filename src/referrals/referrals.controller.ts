@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
@@ -50,9 +50,21 @@ export class ReferralsController {
   @ApiOperation({ summary: 'Create a custom campaign referral code' })
   async createCampaign(
     @Request() req: any,
-    @Body() body: { code?: string | null; label?: string | null },
+    @Body() body: { code?: string | null; label?: string | null; user_ids?: string[] | null },
   ) {
     return this.referralsService.createCampaign(req.user.id, body ?? {});
+  }
+
+  @Patch('admin/campaigns/:id/users')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Assign users to a custom campaign referral code' })
+  async updateCampaignUsers(
+    @Request() req: any,
+    @Param('id') campaignId: string,
+    @Body() body: { user_ids?: string[] | null },
+  ) {
+    return this.referralsService.updateCampaignUsers(req.user.id, campaignId, body ?? {});
   }
 
   @Get('admin/dashboard')
